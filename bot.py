@@ -7,6 +7,7 @@ from aiogram.filters import Command, Filter
 from aiogram.fsm.context import FSMContext
 from fastapi import FastAPI
 import uvicorn
+import os
 
 # Указываем токен прямо в коде
 TOKEN = "699699715:AAFAOCQJ4uDDFmFOaKS0XRpCukFKjb5cym8"
@@ -245,4 +246,6 @@ async def finish_quiz(user_id: int):
 
 # Запуск бота
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    # Получаем порт из переменной окружения или используем 8000 по умолчанию
+    port = int(os.getenv("PORT", 8000))
+    uvicorn.run(app, host="0.0.0.0", port=port)
