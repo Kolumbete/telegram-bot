@@ -1,15 +1,25 @@
 import sqlite3
 import logging
 import asyncio
-from aiogram import Bot, Dispatcher, types
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-from aiogram.filters import Command, Filter
-from aiogram.fsm.context import FSMContext
+from aiogram import Bot, Dispatcher
+from aiogram.types import Update
+from fastapi import FastAPI
+import os
 
-TOKEN = "7699699715:AAHmPFNIR7LUk2ubAowy6cOBUaG38ekG2fs"
-
+TOKEN = os.getenv("699699715:AAFAOCQJ4uDDFmFOaKS0XRpCukFKjb5cym8")
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
+
+app = FastAPI()
+
+@app.post("/")
+async def process_update(update: dict):
+    telegram_update = Update.model_validate(update)
+    await dp.feed_update(bot, telegram_update)
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
