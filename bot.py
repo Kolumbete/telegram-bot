@@ -19,6 +19,10 @@ dp = Dispatcher()
 # Инициализация FastAPI
 app = FastAPI()
 
+@app.get("/")
+async def root():
+    return {"message": "Bot is running!"}
+
 @app.post("/")
 async def process_update(update: dict):
     telegram_update = types.Update.model_validate(update)
@@ -246,6 +250,6 @@ async def finish_quiz(user_id: int):
 
 # Запуск бота
 if __name__ == "__main__":
-    # Получаем порт из переменной окружения или используем 8000 по умолчанию
-    port = int(os.getenv("PORT", 8000))
+    # Получаем порт из переменной окружения или используем 10000 по умолчанию
+    port = int(os.getenv("PORT", 10000))
     uvicorn.run(app, host="0.0.0.0", port=port)
