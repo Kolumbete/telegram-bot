@@ -10,7 +10,7 @@ import uvicorn
 import os
 
 # Указываем токен прямо в коде
-TOKEN = "7699699715:AAFAOCQJ4uDDFmFOaKS0XRpCukFKjb5cym8"
+TOKEN = "699699715:AAFAOCQJ4uDDFmFOaKS0XRpCukFKjb5cym8"
 
 # Инициализация бота и диспетчера
 bot = Bot(token=TOKEN)
@@ -36,7 +36,7 @@ logger = logging.getLogger(__name__)
 conn = sqlite3.connect("questions.db", check_same_thread=False)
 cursor = conn.cursor()
 
-# Создание таблиц
+# Создание таблиц (если их нет)
 cursor.execute(
     """
 CREATE TABLE IF NOT EXISTS topics (
@@ -62,33 +62,6 @@ CREATE TABLE IF NOT EXISTS questions (
 )
 conn.commit()
 
-# Инициализация тестовых данных
-cursor.execute("SELECT COUNT(*) FROM topics")
-if cursor.fetchone()[0] == 0:
-    cursor.execute(
-        "INSERT INTO topics (name) VALUES (?)",
-        ["Гигиена и стерилизация в тату-салонах"],
-    )
-    topic_id = cursor.lastrowid
-
-    cursor.execute(
-        """
-    INSERT INTO questions 
-    (topic_id, question, option_a, option_b, option_c, option_d, correct_answer, explanation)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-        (
-            topic_id,
-            "Какие требования предъявляются к помещению тату-салона?",
-            "Наличие ковровых покрытий и мягкой мебели",
-            "Отдельный кабинет с легко моющимися поверхностями, хорошей вентиляцией и освещением",
-            "Совмещенное помещение для процедур и отдыха",
-            "Отсутствие раковины для мытья рук",
-            "b",
-            "Для соблюдения санитарных норм необходимо, чтобы поверхности легко дезинфицировались, а воздух хорошо циркулировал.",
-        ),
-    )
-    conn.commit()
-
 # Словарь для хранения прогресса пользователей
 user_progress = {}
 
@@ -100,6 +73,11 @@ class TopicFilter(Filter):
 class AnswerFilter(Filter):
     async def __call__(self, callback: types.CallbackQuery) -> bool:
         return callback.data.startswith("answer_")
+
+# Функция для получения всех тем
+def get_all_topics():
+    cursor.execute("SELECT id, name FROM topics")
+    return cursor.fetchall()
 
 # Функция для получения всех вопросов по теме
 def get_all_questions(topic_id: int):
@@ -117,8 +95,11 @@ def get_all_questions(topic_id: int):
 # Обработчик команды /start и /restart
 @dp.message(Command("start", "restart"))
 async def start_handler(message: types.Message):
-    cursor.execute("SELECT id, name FROM topics")
-    topics = cursor.fetchall()
+    topics = get_all_topics()
+
+    if not topics:
+        await message.answer("В базе данных пока нет тем.")
+        return
 
     keyboard = InlineKeyboardMarkup(inline_keyboard=[])
     for topic_id, topic_name in topics:
@@ -126,7 +107,7 @@ async def start_handler(message: types.Message):
             [InlineKeyboardButton(text=topic_name, callback_data=f"topic_{topic_id}")]
         )
 
-    await message.answer("Выберите тему для тестирования:", reply_markup=keyboard)
+    await message.answer("Выберите тему для тестирования:", reply_mup=keyboard)
 
 # Обработчик выбора темы
 @dp.callback_query(TopicFilter())
