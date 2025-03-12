@@ -1,1 +1,1 @@
-worker: python /Users/egorkolumbet/telegram-bot/bot.py
+worker: python bot.py
