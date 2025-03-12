@@ -1,26 +1,29 @@
 import sqlite3
 import logging
 import asyncio
-from aiogram import Bot, Dispatcher
-from aiogram.types import Update
+from aiogram import Bot, Dispatcher, types
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.filters import Command, Filter
+from aiogram.fsm.context import FSMContext
 from fastapi import FastAPI
-import os
+import uvicorn
 
-TOKEN = os.getenv("699699715:AAFAOCQJ4uDDFmFOaKS0XRpCukFKjb5cym8")
+# Указываем токен прямо в коде
+TOKEN = "699699715:AAFAOCQJ4uDDFmFOaKS0XRpCukFKjb5cym8"
+
+# Инициализация бота и диспетчера
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
 
+# Инициализация FastAPI
 app = FastAPI()
 
 @app.post("/")
 async def process_update(update: dict):
-    telegram_update = Update.model_validate(update)
+    telegram_update = types.Update.model_validate(update)
     await dp.feed_update(bot, telegram_update)
 
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
-
+# Настройка логгирования
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -81,19 +84,19 @@ if cursor.fetchone()[0] == 0:
     )
     conn.commit()
 
+# Словарь для хранения прогресса пользователей
 user_progress = {}
 
-
+# Фильтры для обработки callback-запросов
 class TopicFilter(Filter):
     async def __call__(self, callback: types.CallbackQuery) -> bool:
         return callback.data.startswith("topic_")
-
 
 class AnswerFilter(Filter):
     async def __call__(self, callback: types.CallbackQuery) -> bool:
         return callback.data.startswith("answer_")
 
-
+# Функция для получения всех вопросов по теме
 def get_all_questions(topic_id: int):
     cursor.execute(
         """
@@ -106,7 +109,7 @@ def get_all_questions(topic_id: int):
     )
     return cursor.fetchall()
 
-
+# Обработчик команды /start и /restart
 @dp.message(Command("start", "restart"))
 async def start_handler(message: types.Message):
     cursor.execute("SELECT id, name FROM topics")
@@ -120,7 +123,7 @@ async def start_handler(message: types.Message):
 
     await message.answer("Выберите тему для тестирования:", reply_markup=keyboard)
 
-
+# Обработчик выбора темы
 @dp.callback_query(TopicFilter())
 async def topic_handler(callback: types.CallbackQuery):
     topic_id = int(callback.data.split("_")[1])
@@ -142,7 +145,7 @@ async def topic_handler(callback: types.CallbackQuery):
     await callback.answer()
     await send_question(callback.from_user.id)
 
-
+# Функция для отправки вопроса
 async def send_question(user_id: int):
     user_data = user_progress.get(user_id)
     if not user_data:
@@ -174,7 +177,7 @@ async def send_question(user_id: int):
         reply_markup=keyboard,
     )
 
-
+# Обработчик ответа на вопрос
 @dp.callback_query(AnswerFilter())
 async def answer_handler(callback: types.CallbackQuery):
     user_id = callback.from_user.id
@@ -210,7 +213,7 @@ async def answer_handler(callback: types.CallbackQuery):
     await send_question(user_id)
     await callback.answer()
 
-
+# Функция завершения теста
 async def finish_quiz(user_id: int):
     user_data = user_progress.pop(user_id, None)
     if not user_data:
@@ -240,6 +243,6 @@ async def finish_quiz(user_id: int):
     )
     await bot.send_message(440745793, report)
 
-
+# Запуск бота
 if __name__ == "__main__":
-    asyncio.run(dp.start_polling(bot))
+    uvicorn.run(app, host="0.0.0.0", port=8000)
