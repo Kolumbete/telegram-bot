@@ -107,7 +107,7 @@ async def start_handler(message: types.Message):
             [InlineKeyboardButton(text=topic_name, callback_data=f"topic_{topic_id}")]
         )
 
-    await message.answer("Выберите тему для тестирования:", reply_mup=keyboard)
+    await message.answer("Выберите тему для тестирования:", reply_markup=keyboard)
 
 # Обработчик выбора темы
 @dp.callback_query(TopicFilter())
