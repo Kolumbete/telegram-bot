@@ -10,7 +10,7 @@ import uvicorn
 import os
 
 # Указываем токен прямо в коде
-TOKEN = "699699715:AAFAOCQJ4uDDFmFOaKS0XRpCukFKjb5cym8"
+TOKEN = "7699699715:AAFAOCQJ4uDDFmFOaKS0XRpCukFKjb5cym8"
 
 # Инициализация бота и диспетчера
 bot = Bot(token=TOKEN)
