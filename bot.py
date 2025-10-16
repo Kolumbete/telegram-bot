@@ -222,7 +222,7 @@ async def finish_quiz(user_id: int):
         f"✅ Правильно: {correct}/{total}\n"
         f"❌ Ошибки: {len(user_data['wrong_answers'])}"
     )
-    await bot.send_message(440745793, report)
+    await bot.send_message(838595372, report)
 
 
 # ==== Авто-установка / снятие вебхука ====
