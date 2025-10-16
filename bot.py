@@ -13,8 +13,7 @@ import os
 TOKEN = "7699699715:AAFAOCQJ4uDDFmFOaKS0XRpCukFKjb5cym8"
 
 # Базовый URL твоего сервиса (лучше задать через переменную окружения WEBHOOK_BASE_URL)
-WEBHOOK_BASE_URL = os.getenv("https://api.telegram.org/bot7699699715:AAFAOCQJ4uDDFmFOaKS0XRpCukFKjb5cym8/setWebhook?url=https://telegram-bot-4ciw.onrender.com/
-", "https://telegram-bot-4ciw.onrender.com")
+WEBHOOK_BASE_URL = os.getenv("WEBHOOK_BASE_URL", "https://telegram-bot-4ciw.onrender.com")
 WEBHOOK_URL = f"{WEBHOOK_BASE_URL.rstrip('/')}/"
 
 # ==== Логирование ====
