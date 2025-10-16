@@ -8,23 +8,26 @@ from fastapi import FastAPI, Request
 import uvicorn
 import os
 
-# ==== Настройки ====
-# Токен оставляем в коде (как ты просил)
+# ====== Конфиг ======
+# Токен оставляем в коде (как просил)
 TOKEN = "7699699715:AAFAOCQJ4uDDFmFOaKS0XRpCukFKjb5cym8"
 
-# Базовый URL твоего сервиса (лучше задать через переменную окружения WEBHOOK_BASE_URL)
+# Публичный базовый URL твоего сервиса
 WEBHOOK_BASE_URL = os.getenv("WEBHOOK_BASE_URL", "https://telegram-bot-4ciw.onrender.com")
 WEBHOOK_URL = f"{WEBHOOK_BASE_URL.rstrip('/')}/"
 
-# ==== Логирование ====
+# Включить внутренний само-пинг (необязательно): KEEPALIVE_SELF_PING=true
+KEEPALIVE_SELF_PING = os.getenv("KEEPALIVE_SELF_PING", "false").lower() in {"1", "true", "yes"}
+
+# ====== Логирование ======
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
 
-# ==== Aiogram ====
+# ====== Aiogram ======
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
 
-# ==== FastAPI ====
+# ====== FastAPI ======
 app = FastAPI()
 
 
@@ -35,14 +38,16 @@ async def root():
 
 @app.head("/")
 async def head_root():
-    # чтобы Render health-checks не сыпали 405
     return {}
+
+@app.get("/health")
+async def health():
+    return {"status": "ok"}
 
 
 # ---- входящие апдейты из Telegram (вебхук) ----
 @app.post("/")
 async def process_update(update: dict, request: Request):
-    # минимальное логирование, чтобы видеть что Telegram реально шлет POST
     try:
         ip = request.client.host if request and request.client else "unknown"
         logger.info(f"POST / from {ip} | keys={list(update.keys())}")
@@ -54,10 +59,9 @@ async def process_update(update: dict, request: Request):
     return {"ok": True}
 
 
-# ==== SQLite ====
+# ====== SQLite ======
 conn = sqlite3.connect("questions.db", check_same_thread=False)
 cursor = conn.cursor()
-
 cursor.executescript("""
 CREATE TABLE IF NOT EXISTS topics (
     id INTEGER PRIMARY KEY,
@@ -83,11 +87,11 @@ def fetch_all(query, params=()):
     return cursor.fetchall()
 
 
-# ==== user_progress в памяти ====
+# ====== user_progress в памяти ======
 user_progress = {}
 
 
-# ==== Хэндлеры ====
+# ====== Хэндлеры ======
 @dp.message(Command("start", "restart"))
 async def start_handler(message: types.Message):
     topics = fetch_all("SELECT id, name FROM topics")
@@ -108,8 +112,7 @@ async def start_handler(message: types.Message):
 
 @dp.callback_query(lambda c: c.data.startswith("topic_"))
 async def topic_handler(callback: types.CallbackQuery):
-    # СРАЗУ отвечаем, чтобы не словить "query is too old"
-    await callback.answer()
+    await callback.answer()  # быстрый ответ, чтобы не ловить "query is too old"
 
     topic_id = int(callback.data.split("_")[1])
     questions = fetch_all(
@@ -166,8 +169,7 @@ async def send_question(user_id: int):
 
 @dp.callback_query(lambda c: c.data.startswith("answer_"))
 async def answer_handler(callback: types.CallbackQuery):
-    # СРАЗУ отвечаем, чтобы не словить "query is too old"
-    await callback.answer()
+    await callback.answer()  # быстрый ответ
 
     user_id = callback.from_user.id
     user_data = user_progress.get(user_id)
@@ -214,7 +216,6 @@ async def finish_quiz(user_id: int):
 
     await bot.send_message(user_id, result_text)
 
-    # Отчет админу
     report = (
         f"📊 Результаты пользователя\n"
         f"👤 Имя: {user_data['username']}\n"
@@ -222,31 +223,40 @@ async def finish_quiz(user_id: int):
         f"✅ Правильно: {correct}/{total}\n"
         f"❌ Ошибки: {len(user_data['wrong_answers'])}"
     )
-    await bot.send_message(838595372, report)
+    await bot.send_message(440745793, report)
 
 
-# ==== Авто-установка / снятие вебхука ====
+# ====== авто-вебхук + (опционально) само-пинг ======
+async def _keepalive_loop():
+    import aiohttp
+    url = WEBHOOK_BASE_URL.rstrip("/") + "/health"
+    logger.info(f"Keepalive self-ping is ON. Target: GET {url}")
+    async with aiohttp.ClientSession() as session:
+        while True:
+            try:
+                async with session.get(url, timeout=10) as resp:
+                    logger.info(f"Keepalive ping -> {resp.status}")
+            except Exception as e:
+                logger.warning(f"Keepalive ping failed: {e}")
+            await asyncio.sleep(300)  # каждые 5 минут
+
 @app.on_event("startup")
 async def on_startup():
     logger.info(f"Setting webhook to: {WEBHOOK_URL}")
-    # drop_pending_updates=True чтобы не копились старые апдейты
     await bot.set_webhook(WEBHOOK_URL, drop_pending_updates=True)
     info = await bot.get_webhook_info()
     logger.info(f"Webhook set. Telegram says: {info}")
 
-
-@app.on_event("shutdown")
-async def on_shutdown():
-    try:
-        logger.info("Deleting webhook...")
-        await bot.delete_webhook(drop_pending_updates=False)
-        logger.info("Webhook deleted.")
-    finally:
-        # аккуратно закрываем сессию бота
-        await bot.session.close()
+    if KEEPALIVE_SELF_PING and WEBHOOK_BASE_URL.startswith("http"):
+        # запускаем фоновой таск само-пинга
+        app.state.keepalive_task = asyncio.create_task(_keepalive_loop())
 
 
-# ==== Запуск uvicorn ====
+# ВАЖНО: намеренно НЕТ on_shutdown() и удаления вебхука,
+# чтобы Render sleep/stop не обнулял вебхук
+
+
+# ====== Запуск ======
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 10000))
     uvicorn.run(app, host="0.0.0.0", port=port)
