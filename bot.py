@@ -12,11 +12,11 @@ import os
 # Токен оставляем в коде (как просил)
 TOKEN = "7699699715:AAFAOCQJ4uDDFmFOaKS0XRpCukFKjb5cym8"
 
-# Публичный базовый URL твоего сервиса
+# Публичный базовый URL твоего сервиса (можно задать в Render как ENV: WEBHOOK_BASE_URL)
 WEBHOOK_BASE_URL = os.getenv("WEBHOOK_BASE_URL", "https://telegram-bot-4ciw.onrender.com")
 WEBHOOK_URL = f"{WEBHOOK_BASE_URL.rstrip('/')}/"
 
-# Включить внутренний само-пинг (необязательно): KEEPALIVE_SELF_PING=true
+# Опционально: включить внутренний само-пинг (KEEPALIVE_SELF_PING=true)
 KEEPALIVE_SELF_PING = os.getenv("KEEPALIVE_SELF_PING", "false").lower() in {"1", "true", "yes"}
 
 # ====== Логирование ======
@@ -48,6 +48,7 @@ async def health():
 # ---- входящие апдейты из Telegram (вебхук) ----
 @app.post("/")
 async def process_update(update: dict, request: Request):
+    # минимальное логирование, чтобы видеть входящие POST из Telegram
     try:
         ip = request.client.host if request and request.client else "unknown"
         logger.info(f"POST / from {ip} | keys={list(update.keys())}")
@@ -112,7 +113,8 @@ async def start_handler(message: types.Message):
 
 @dp.callback_query(lambda c: c.data.startswith("topic_"))
 async def topic_handler(callback: types.CallbackQuery):
-    await callback.answer()  # быстрый ответ, чтобы не ловить "query is too old"
+    # быстрый ответ на callback, чтобы не ловить "query is too old"
+    await callback.answer()
 
     topic_id = int(callback.data.split("_")[1])
     questions = fetch_all(
@@ -153,23 +155,35 @@ async def send_question(user_id: int):
 
     q_id, q_text, a, b, c, d, correct, explanation = user_data["questions"][index]
 
+    # Полный текст вариантов — в сообщении (не обрезается Telegram'ом)
+    options_text = "\n".join([
+        f"a) {a}",
+        f"b) {b}",
+        f"c) {c}",
+        f"d) {d}",
+    ])
+
+    # Кнопки — только короткие метки, чтобы не было обрезаний "…"
     keyboard = InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text=f"{letter}) {option}", callback_data=f"answer_{index}_{letter}")]
-            for letter, option in zip(["a", "b", "c", "d"], [a, b, c, d])
+            [InlineKeyboardButton(text="a", callback_data=f"answer_{index}_a")],
+            [InlineKeyboardButton(text="b", callback_data=f"answer_{index}_b")],
+            [InlineKeyboardButton(text="c", callback_data=f"answer_{index}_c")],
+            [InlineKeyboardButton(text="d", callback_data=f"answer_{index}_d")],
         ]
     )
 
     await bot.send_message(
         user_id,
-        f"Вопрос {index + 1} из {len(user_data['questions'])}:\n\n{q_text}",
+        f"Вопрос {index + 1} из {len(user_data['questions'])}:\n\n{q_text}\n\n{options_text}",
         reply_markup=keyboard,
     )
 
 
 @dp.callback_query(lambda c: c.data.startswith("answer_"))
 async def answer_handler(callback: types.CallbackQuery):
-    await callback.answer()  # быстрый ответ
+    # быстрый ответ
+    await callback.answer()
 
     user_id = callback.from_user.id
     user_data = user_progress.get(user_id)
@@ -223,12 +237,12 @@ async def finish_quiz(user_id: int):
         f"✅ Правильно: {correct}/{total}\n"
         f"❌ Ошибки: {len(user_data['wrong_answers'])}"
     )
-    await bot.send_message(440745793, report)
+    await bot.send_message(838595372, report)
 
 
 # ====== авто-вебхук + (опционально) само-пинг ======
 async def _keepalive_loop():
-    import aiohttp
+    import aiohttp  # есть в зависимостях aiogram
     url = WEBHOOK_BASE_URL.rstrip("/") + "/health"
     logger.info(f"Keepalive self-ping is ON. Target: GET {url}")
     async with aiohttp.ClientSession() as session:
@@ -243,6 +257,7 @@ async def _keepalive_loop():
 @app.on_event("startup")
 async def on_startup():
     logger.info(f"Setting webhook to: {WEBHOOK_URL}")
+    # drop_pending_updates=True чтобы не копились старые апдейты после сна
     await bot.set_webhook(WEBHOOK_URL, drop_pending_updates=True)
     info = await bot.get_webhook_info()
     logger.info(f"Webhook set. Telegram says: {info}")
@@ -253,7 +268,7 @@ async def on_startup():
 
 
 # ВАЖНО: намеренно НЕТ on_shutdown() и удаления вебхука,
-# чтобы Render sleep/stop не обнулял вебхук
+# чтобы Render sleep/stop не обнулял вебхук.
 
 
 # ====== Запуск ======
